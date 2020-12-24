@@ -1,5 +1,6 @@
 # Edge Detection
-Canny edge detection in Matlab that does not use any edge-detection function.
+Canny edge detection in Matlab without any edge-detection function.
+
 
 Here are the steps:
 1. Noise reduction by Gaussian blur
