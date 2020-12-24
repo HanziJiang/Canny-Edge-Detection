@@ -1,52 +1,84 @@
+% Reference: https://towardsdatascience.com/canny-edge-detection-step-by-step-in-python-computer-vision-b49c3a2d8123
+
 mycam = webcam;
+frames = 30;
 
-frames = 2;
+for fr=1:frames
+    % Capture image.
+    I = snapshot(mycam);
+    I = rgb2gray(I);
+    I = im2double(I);
 
-for i = 1:frames
-    img = im2double(snapshot(mycam));
-    img_cpy = img;
-    
-    mask_h = [1, 0, -1; 1, 0, -1; 1, 0, -1]; 
-    mask_v = [1, 1, 1; 0, 0, 0; -1, -1, -1]; 
-    mask_d = [0, -1, -1; 1, 0, -1; 1, 1, 0]; 
-    mask_dd = [1, 1, 0; 1, 0, -1; 0, -1, -1]; 
-    
-    mask_h = flipud(mask_h);  
-    mask_h = fliplr(mask_h); 
-    mask_h = repmat(mask_h, 1, 1, 3);
-    mask_v = flipud(mask_v);  
-    mask_v = fliplr(mask_v); 
-    mask_v = repmat(mask_v, 1, 1, 3);
-    mask_d = flipud(mask_d);  
-    mask_d = fliplr(mask_d); 
-    mask_d = repmat(mask_d, 1, 1, 3);
-    mask_dd = flipud(mask_dd);  
-    mask_dd = fliplr(mask_dd); 
-    mask_dd = repmat(mask_dd, 1, 1, 3);
-    
-    for i=2:size(img, 1)-1
-        for j=2:size(img, 2)-1
-            portion = img_cpy(i-1:i+1, j-1:j+1, :);
-            
-            masked_h = mask_h .* portion;  
-            avg_h = sum(masked_h(:), [1 2]); 
-            
-            masked_v = mask_v .* portion;  
-            avg_v = sum(masked_v(:), [1 2]); 
-            
-            masked_d = mask_d .* portion;  
-            avg_d = sum(masked_d(:), [1 2]); 
-            
-            masked_dd = mask_dd .* portion;  
-            avg_dd = sum(masked_dd(:), [1 2]); 
-            
-            img(i, j, :) = max([avg_h, avg_v, avg_d, avg_dd]);
+    % Blur the image using a Gaussian filter.
+    I = imgaussfilt(I, 2);
+    sizeI = size(I);
+
+    % Find magnitude and orientation of gradient.
+    Ix = zeros(sizeI);
+    Iy = zeros(sizeI);
+    mask_grad_h = [-1, 0, 1; -2, 0, 2; -1, 0, 1]; 
+    mask_grad_v = [1, 2, 1; 0, 0, 0; -1, -2, -1];
+    for i=2:size(I, 1)-1
+        for j=2:size(I, 2)-1
+            portion = I(i-1:i+1, j-1:j+1);
+            Ix(i, j) = Ix(i, j) + sum(mask_grad_h .* portion, 'all');
+            Iy(i, j) = Iy(i, j) + sum(mask_grad_v .* portion, 'all');
         end 
     end 
-    
-    imagesc(img);
-    axis image;
-    axis off;
-    
+    strength = sqrt(Iy.^2 + Ix.^2);
+    direction = atan2(Iy, Ix);
+    direction = direction .* 180 ./ pi;
+    direction = mod(direction + 360, 360);
+
+    % Perform non-max supression.
+    I_supressed = zeros(sizeI);
+    for i=2:sizeI(1, 1)-1
+        for j=2:sizeI(1, 2)-1
+            if (direction(i, j) >= 0 ) && (direction(i, j) < 22.5) || ...
+                    (direction(i, j) >= 157.5) && (direction(i, j) <= 202.5) || ...
+                    (direction(i, j) >= 337.5) && (direction(i, j) <= 360)
+                a = strength(i, j+1);
+                b = strength(i, j-1);
+            elseif (direction(i, j) >= 22.5) && (direction(i, j) < 67.5) || ...
+                    (direction(i, j) >= 202.5) && (direction(i, j) < 247.5)
+                a = strength(i+1, j-1);
+                b = strength(i-1, j+1);
+            elseif (direction(i, j) >= 67.5 && direction(i, j) < 112.5) || ...
+                    (direction(i, j) >= 247.5 && direction(i, j) < 292.5)
+                a = strength(i+1, j);
+                b = strength(i-1, j);
+            elseif (direction(i, j) >= 112.5 && direction(i, j) < 157.5) || ...
+                    (direction(i, j) >= 292.5 && direction(i, j) < 337.5)
+                a = strength(i-1, j-1);
+                b = strength(i+1, j+1);
+            end
+
+            if (strength(i, j) >= a) && (strength(i, j) >= b)
+                I_supressed(i, j) = strength(i, j);
+            else
+                I_supressed(i, j) = 0.0;
+            end
+        end 
+    end 
+
+    % Double thresholding.
+    final = zeros(sizeI);
+    Tau_l = 0.01 * max(I_supressed, [], 'all');
+    Tau_h = 0.09 * max(I_supressed, [], 'all');
+    for i=1:sizeI(1, 1)
+        for j=1:sizeI(1, 2)
+            if (I_supressed(i, j) < Tau_l)
+                final(i, j) = 0.0;
+            elseif (I_supressed(i, j) > Tau_h)
+                final(i, j) = 1.0;
+            elseif ((I_supressed(i+1, j) > Tau_h) || (I_supressed(i-1, j) > Tau_h) ...
+                    || (I_supressed(i, j+1) > Tau_h) || (I_supressed(i, j-1) > Tau_h) ...
+                    || (I_supressed(i-1, j-1) > Tau_h) || (I_supressed(i-1, j+1) > Tau_h) ...
+                    || (I_supressed(i+1, j+1) > Tau_h) || (I_supressed(i+1, j-1) > Tau_h))
+                final(i, j) = 1.0;
+            end
+        end
+    end
+
+    imshow(final);
 end
-    
