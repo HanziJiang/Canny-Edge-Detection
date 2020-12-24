@@ -1,5 +1,5 @@
-# Edge Detection
-Canny edge detection in Matlab without any edge-detection function.
+# Real-time Canny Edge Detection
+Real-time Canny edge detection in Matlab without any edge-detection function.
 
 
 Here are the steps:
